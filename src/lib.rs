@@ -8,7 +8,7 @@ use uuid::Uuid;
 /// A parsed tail ID for efficient suffix matching against UUIDs.
 ///
 /// Stores the tail ID as a `u128` value with a length field, enabling fast bitwise comparison.
-/// Accepts 1-32 hex characters (dashes and spaces are stripped during parsing, case-insensitive).
+/// Accepts 1-32 hex characters (dashes are stripped during parsing, case-insensitive).
 ///
 /// # Example
 ///
@@ -104,7 +104,7 @@ impl TryFrom<&[u8]> for TailId {
         let mut len = 0usize;
 
         for &b in bytes {
-            if b == b'-' || b == b' ' {
+            if b == b'-' {
                 continue;
             }
             if len >= 32 {
@@ -145,7 +145,7 @@ impl TryFrom<&str> for TailId {
 /// Error returned when parsing a [`TailId`].
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum ParseError {
-    /// The input is empty after stripping dashes and spaces.
+    /// The input is empty after stripping dashes.
     #[error("tail ID cannot be empty")]
     Empty,
 
@@ -205,17 +205,15 @@ mod tests {
         let lower: TailId = "abcd".parse().expect("valid");
         let upper: TailId = "ABCD".parse().expect("valid");
         let dashes: TailId = "ab-cd".parse().expect("valid");
-        let spaces: TailId = "ab cd".parse().expect("valid");
 
         assert_eq!(lower, upper);
         assert_eq!(lower, dashes);
-        assert_eq!(lower, spaces);
     }
 
     #[test]
     fn parse_rejects_empty() {
         assert!(matches!(TailId::try_from(""), Err(ParseError::Empty)));
-        assert!(matches!(TailId::try_from("  - - "), Err(ParseError::Empty)));
+        assert!(matches!(TailId::try_from("---"), Err(ParseError::Empty)));
     }
 
     #[test]

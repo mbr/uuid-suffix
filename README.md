@@ -27,7 +27,7 @@ assert!(tail.matches(&ids[1]));
 
 ## API
 
-- `TailId` - Parsed tail ID for efficient matching (1-32 hex chars, case-insensitive, strips dashes/spaces)
+- `TailId` - Parsed tail ID for efficient matching (1-32 hex chars, case-insensitive, strips dashes)
 - `resolve_tail_id(iter, tail_id)` - Find the unique UUID matching a `TailId`
 
 Resolution returns `Err(ResolveError::Ambiguous)` if multiple UUIDs match, or `Err(ResolveError::NotFound)` if none do.
