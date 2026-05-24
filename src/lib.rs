@@ -146,15 +146,15 @@ impl TryFrom<&str> for TailId {
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum ParseError {
     /// The input is empty after stripping dashes.
-    #[error("tail ID cannot be empty")]
+    #[error("expected 1-32 hex characters (UUID suffix), got empty input")]
     Empty,
 
     /// The input exceeds 32 hex characters.
-    #[error("tail ID cannot exceed 32 hex characters")]
+    #[error("expected 1-32 hex characters (UUID suffix), input too long")]
     TooLong,
 
     /// The input contains a non-hex byte.
-    #[error("invalid byte in tail ID: 0x{0:02x}")]
+    #[error("expected hex digit (0-9, a-f), found 0x{0:02x}")]
     InvalidByte(u8),
 }
 
