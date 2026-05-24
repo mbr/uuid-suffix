@@ -1,19 +1,14 @@
-//! UUIDv7 newtype with short ID display and efficient serialization.
-//!
-//! Provides [`Dandruff`], a wrapper around [`Uuid`] that displays as a short 8-character hex
-//! suffix by default, while preserving all the benefits of UUIDv7: time-ordered, globally unique,
-//! and database-friendly.
+#![doc = include_str!("../README.md")]
 
 use std::{fmt, str::FromStr};
 
 use thiserror::Error;
 use uuid::Uuid;
 
-/// A UUIDv7 identifier with convenient short display.
+/// A time-ordered UUID (v6 or v7) with convenient short display.
 ///
-/// Displays as the last 8 hex characters by default (e.g., `a1b2c3d4`), which provides a
-/// human-friendly identifier while maintaining uniqueness in most practical scenarios. Use the
-/// alternate format `{:#}` for the full hyphenated UUID.
+/// Displays as the last 7 hex characters by default. Use width specifier for more (e.g.,
+/// `{:9}`), or `{:#}` for the full hyphenated UUID.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
 pub struct Dandruff(Uuid);
 
@@ -21,15 +16,26 @@ impl Dandruff {
     /// Generates a new UUIDv7-based identifier.
     ///
     /// Uses the current timestamp and random bits to create a time-ordered, globally unique ID.
+    #[cfg(feature = "v7")]
     #[inline]
-    pub fn new() -> Self {
+    pub fn new_v7() -> Self {
         Self(Uuid::now_v7())
     }
 
-    /// Wraps an existing UUID without validating that it is version 7.
+    /// Generates a new UUIDv6-based identifier with the given node ID.
+    ///
+    /// Uses the current timestamp and the provided 6-byte node ID. This is useful when you need
+    /// deterministic IDs based on machine identity, similar to Snowflake IDs.
+    #[cfg(feature = "v6")]
+    #[inline]
+    pub fn new_v6(node_id: &[u8; 6]) -> Self {
+        Self(Uuid::now_v6(node_id))
+    }
+
+    /// Wraps an existing UUID without validating its version.
     ///
     /// Semantic guarantees of [`Dandruff`] (time ordering, timestamp extraction) only hold for
-    /// actual v7 UUIDs. Use [`TryFrom`] for validated conversion.
+    /// v6 or v7 UUIDs. Use [`TryFrom`] for validated conversion.
     #[inline]
     pub fn from_uuid_unchecked(uuid: Uuid) -> Self {
         Self(uuid)
@@ -48,25 +54,31 @@ impl Dandruff {
     }
 }
 
+#[cfg(feature = "v7")]
 impl Default for Dandruff {
     /// Generates a new UUIDv7-based identifier.
     #[inline]
     fn default() -> Self {
-        Self::new()
+        Self::new_v7()
     }
 }
 
+/// Default short ID length (7 hex characters).
+const DEFAULT_SHORT_LEN: usize = 7;
+
 impl fmt::Display for Dandruff {
-    /// Formats as the short ID (last 8 hex characters).
+    /// Formats as the short ID (last 7 hex characters by default).
     ///
+    /// Use width specifier for longer IDs (e.g., `{:9}` for 9 chars).
     /// Use `{:#}` for the full hyphenated UUID format.
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         if f.alternate() {
             write!(f, "{}", self.0.as_hyphenated())
         } else {
+            let width = f.width().unwrap_or(DEFAULT_SHORT_LEN).min(32);
             let buf = &mut [0u8; 32];
             let s = self.0.as_simple().encode_lower(buf);
-            f.write_str(&s[24..])
+            f.write_str(&s[32 - width..])
         }
     }
 }
@@ -80,21 +92,20 @@ impl FromStr for Dandruff {
     /// against a collection, use [`resolve`].
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let uuid = Uuid::parse_str(s).map_err(ParseError::Uuid)?;
-        Self::try_from(uuid).map_err(ParseError::NotV7)
+        Self::try_from(uuid).map_err(ParseError::Version)
     }
 }
 
 impl TryFrom<Uuid> for Dandruff {
-    type Error = NotV7Error;
+    type Error = VersionError;
 
-    /// Converts a UUID to a [`Dandruff`], validating that it is version 7.
+    /// Converts a UUID to a [`Dandruff`], validating that it is version 6 or 7.
     fn try_from(uuid: Uuid) -> Result<Self, Self::Error> {
-        if uuid.get_version_num() == 7 {
+        let version = uuid.get_version_num();
+        if version == 6 || version == 7 {
             Ok(Self(uuid))
         } else {
-            Err(NotV7Error {
-                version: uuid.get_version_num(),
-            })
+            Err(VersionError { version })
         }
     }
 }
@@ -123,10 +134,10 @@ impl From<Dandruff> for Uuid {
     }
 }
 
-/// Error returned when a UUID is not version 7.
+/// Error returned when a UUID is not a time-ordered version (v6 or v7).
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
-#[error("expected UUID version 7, got version {version}")]
-pub struct NotV7Error {
+#[error("expected UUID version 6 or 7, got version {version}")]
+pub struct VersionError {
     /// The actual version number of the UUID.
     pub version: usize,
 }
@@ -138,9 +149,9 @@ pub enum ParseError {
     #[error("invalid UUID: {0}")]
     Uuid(#[source] uuid::Error),
 
-    /// The UUID is valid but not version 7.
+    /// The UUID is valid but not a time-ordered version.
     #[error("{0}")]
-    NotV7(#[source] NotV7Error),
+    Version(#[source] VersionError),
 }
 
 /// Error returned when resolving a short ID.
@@ -163,7 +174,7 @@ pub enum ResolveError {
 ///
 /// Accepts 4-32 hex character patterns. Input is normalized: dashes and spaces are stripped,
 /// letters are lowercased. The pattern matches as a substring anywhere in the UUID's hex
-/// representation, though typically the last 8 characters (the short ID) are used.
+/// representation, though typically the last 7 characters (the short ID) are used.
 ///
 /// # Errors
 ///
@@ -208,41 +219,72 @@ where
 mod tests {
     use super::*;
 
+    #[cfg(feature = "v7")]
     #[test]
     fn new_creates_v7() {
-        let id = Dandruff::new();
+        let id = Dandruff::new_v7();
         assert_eq!(id.as_uuid().get_version_num(), 7);
     }
 
+    #[cfg(feature = "v6")]
+    #[test]
+    fn new_v6_creates_v6() {
+        let node_id = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+        let id = Dandruff::new_v6(&node_id);
+        assert_eq!(id.as_uuid().get_version_num(), 6);
+    }
+
+    #[cfg(feature = "v6")]
+    #[test]
+    fn try_from_accepts_v6() {
+        let node_id = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
+        let uuid = Uuid::now_v6(&node_id);
+        let result = Dandruff::try_from(uuid);
+        assert!(result.is_ok());
+        assert_eq!(result.expect("should be ok").as_uuid().get_version_num(), 6);
+    }
+
+    #[cfg(feature = "v7")]
     #[test]
     fn display_shows_short_id() {
-        let id = Dandruff::new();
+        let id = Dandruff::new_v7();
         let short = format!("{}", id);
-        assert_eq!(short.len(), 8);
+        assert_eq!(short.len(), 7);
         assert!(short.chars().all(|c| c.is_ascii_hexdigit()));
     }
 
+    #[cfg(feature = "v7")]
+    #[test]
+    fn display_respects_width() {
+        let id = Dandruff::new_v7();
+        assert_eq!(format!("{:9}", id).len(), 9);
+        assert_eq!(format!("{:12}", id).len(), 12);
+        assert_eq!(format!("{:32}", id).len(), 32);
+    }
+
+    #[cfg(feature = "v7")]
     #[test]
     fn alternate_display_shows_full_uuid() {
-        let id = Dandruff::new();
+        let id = Dandruff::new_v7();
         let full = format!("{:#}", id);
         assert_eq!(full.len(), 36);
         assert!(full.contains('-'));
     }
 
+    #[cfg(feature = "v7")]
     #[test]
     fn from_str_roundtrip() {
-        let id = Dandruff::new();
+        let id = Dandruff::new_v7();
         let s = format!("{:#}", id);
         let parsed: Dandruff = s.parse().expect("should parse");
         assert_eq!(id, parsed);
     }
 
     #[test]
-    fn try_from_rejects_non_v7() {
+    fn try_from_rejects_non_time_ordered() {
         let nil = Uuid::nil();
         let result = Dandruff::try_from(nil);
-        assert!(matches!(result, Err(NotV7Error { version: 0 })));
+        assert!(matches!(result, Err(VersionError { version: 0 })));
     }
 
     #[test]
@@ -321,7 +363,7 @@ mod tests {
     }
 }
 
-#[cfg(test)]
+#[cfg(all(test, feature = "v7"))]
 mod proptests {
     use proptest::prelude::*;
 
@@ -330,7 +372,7 @@ mod proptests {
     proptest! {
         #[test]
         fn display_fromstr_roundtrip(_seed: u64) {
-            let id = Dandruff::new();
+            let id = Dandruff::new_v7();
             let full = format!("{:#}", id);
             let parsed: Dandruff = full.parse().expect("roundtrip should succeed");
             prop_assert_eq!(id, parsed);

@@ -1,6 +1,6 @@
 [package]
 name = "dandruff"
-description = "UUIDv7 newtype with short ID display and efficient serialization"
+description = "Time-ordered UUID (v6/v7) newtype with short ID display and efficient serialization"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
@@ -8,13 +8,15 @@ repository = "https://github.com/mbr/dandruff-rs"
 
 [dependencies]
 thiserror = "2"
-uuid = { version = "1", features = ["v7"] }
+uuid = { version = "1" }
 
 [dev-dependencies]
 proptest = "1"
 
 [features]
-default = []
+default = ["v6", "v7"]
+v6 = ["uuid/v6", "uuid/rng"]
+v7 = ["uuid/v7", "uuid/rng"]
 fast-rng = ["uuid/fast-rng"]
 rng-rand = ["uuid/rng-rand"]
 rng-getrandom = ["uuid/rng-getrandom"]
