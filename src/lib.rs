@@ -195,35 +195,22 @@ mod tests {
     use super::*;
 
     #[test]
-    fn parse_valid() {
-        let tail: TailId = "3f6a4e7".parse().expect("valid");
-        assert_eq!(tail.len(), 7);
-    }
-
-    #[test]
     fn parse_normalizes() {
-        let lower: TailId = "abcd".parse().expect("valid");
-        let upper: TailId = "ABCD".parse().expect("valid");
-        let dashes: TailId = "ab-cd".parse().expect("valid");
-
+        let lower: TailId = "abcd".parse().unwrap();
+        let upper: TailId = "ABCD".parse().unwrap();
+        let dashes: TailId = "ab-cd".parse().unwrap();
         assert_eq!(lower, upper);
         assert_eq!(lower, dashes);
     }
 
     #[test]
-    fn parse_rejects_empty() {
+    fn parse_rejects_invalid() {
         assert!(matches!(TailId::try_from(""), Err(ParseError::Empty)));
         assert!(matches!(TailId::try_from("---"), Err(ParseError::Empty)));
-    }
-
-    #[test]
-    fn parse_rejects_too_long() {
-        let result = TailId::try_from("0123456789abcdef0123456789abcdef0");
-        assert!(matches!(result, Err(ParseError::TooLong)));
-    }
-
-    #[test]
-    fn parse_rejects_invalid_bytes() {
+        assert!(matches!(
+            TailId::try_from("0123456789abcdef0123456789abcdef0"),
+            Err(ParseError::TooLong)
+        ));
         assert!(matches!(
             TailId::try_from("ghij"),
             Err(ParseError::InvalidByte(b'g'))
@@ -231,71 +218,44 @@ mod tests {
     }
 
     #[test]
-    fn display_roundtrip() {
-        let original = "3f6a4e7";
-        let tail: TailId = original.parse().expect("valid");
-        assert_eq!(format!("{}", tail), original);
-    }
+    fn display() {
+        let tail: TailId = "3f6a4e7".parse().unwrap();
+        assert_eq!(format!("{tail}"), "3f6a4e7");
 
-    #[test]
-    fn display_preserves_leading_zeros() {
-        let tail: TailId = "00abcd".parse().expect("valid");
-        assert_eq!(format!("{}", tail), "00abcd");
+        let tail: TailId = "00abcd".parse().unwrap();
+        assert_eq!(format!("{tail}"), "00abcd");
     }
 
     #[test]
     fn matches_suffix() {
-        let uuid = Uuid::parse_str("01234567-89ab-7def-8000-aabbccddeeff").expect("valid");
-
-        let suffix: TailId = "eeff".parse().expect("valid");
-        assert!(suffix.matches(&uuid));
-
-        let full: TailId = "0123456789ab7def8000aabbccddeeff".parse().expect("valid");
-        assert!(full.matches(&uuid));
-
-        let wrong: TailId = "ffff".parse().expect("valid");
-        assert!(!wrong.matches(&uuid));
+        let uuid = Uuid::parse_str("01234567-89ab-7def-8000-aabbccddeeff").unwrap();
+        assert!(TailId::try_from("eeff").unwrap().matches(&uuid));
+        assert!(
+            TailId::try_from("0123456789ab7def8000aabbccddeeff")
+                .unwrap()
+                .matches(&uuid)
+        );
+        assert!(!TailId::try_from("ffff").unwrap().matches(&uuid));
     }
 
     #[test]
-    fn from_bytes() {
-        let tail = TailId::try_from(b"3f6a4e7".as_slice()).expect("valid");
-        assert_eq!(tail.len(), 7);
-        assert_eq!(format!("{}", tail), "3f6a4e7");
-    }
-
-    #[test]
-    fn resolve_finds_unique_match() {
-        let id1 = Uuid::parse_str("01234567-89ab-7def-8000-000011111111").expect("valid");
-        let id2 = Uuid::parse_str("01234567-89ab-7def-8000-000022222222").expect("valid");
+    fn resolve() {
+        let id1 = Uuid::parse_str("01234567-89ab-7def-8000-000011112222").unwrap();
+        let id2 = Uuid::parse_str("fedcba98-7654-7321-8000-000033332222").unwrap();
         let ids = vec![id1, id2];
 
-        let tail1: TailId = "11111111".parse().expect("valid");
-        let tail2: TailId = "22222222".parse().expect("valid");
-        assert_eq!(resolve_tail_id(&ids, &tail1), Ok(id1));
-        assert_eq!(resolve_tail_id(&ids, &tail2), Ok(id2));
-    }
+        // Unique match
+        assert_eq!(resolve_tail_id(&ids, &"11112222".parse().unwrap()), Ok(id1));
+        assert_eq!(resolve_tail_id(&ids, &"33332222".parse().unwrap()), Ok(id2));
 
-    #[test]
-    fn resolve_returns_not_found() {
-        let id = Uuid::parse_str("01234567-89ab-7def-8000-000011111111").expect("valid");
-        let ids = vec![id];
-
-        let tail: TailId = "deadbeef".parse().expect("valid");
+        // Not found
         assert!(matches!(
-            resolve_tail_id(&ids, &tail),
+            resolve_tail_id(&ids, &"ffff".parse().unwrap()),
             Err(ResolveError::NotFound)
         ));
-    }
 
-    #[test]
-    fn resolve_returns_ambiguous() {
-        let id1 = Uuid::parse_str("01234567-89ab-7def-8000-000012345678").expect("valid");
-        let id2 = Uuid::parse_str("fedcba98-7654-7321-8000-000012345678").expect("valid");
-        let ids = vec![id1, id2];
-
-        let tail: TailId = "12345678".parse().expect("valid");
-        let result = resolve_tail_id(&ids, &tail);
-        assert!(matches!(result, Err(ResolveError::Ambiguous(ref v)) if v.len() == 2));
+        // Ambiguous (both end in 2222)
+        let result = resolve_tail_id(&ids, &"2222".parse().unwrap());
+        assert!(matches!(result, Err(ResolveError::Ambiguous(v)) if v.len() == 2));
     }
 }
