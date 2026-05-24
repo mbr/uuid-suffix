@@ -27,3 +27,8 @@ assert!(tail.matches(&ids[1]));
 // Create a tail ID from a UUID for display
 println!("{}", TailId::new(&ids[0]));  // "d3f6a4e"
 ```
+
+## Features
+
+- **serde**: `serde` serialization support. Always uses string representation (even in binary formats) because tail IDs can be odd-length hex (nibbles can't be losslessly encoded as bytes).
+- **schemars**: JSON Schema support for use with MCP servers and similar.
