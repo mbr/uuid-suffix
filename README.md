@@ -1,10 +1,10 @@
 # tail-id
 
-Resolve UUIDs by their suffix, git-style.
+Resolve UUIDs by their suffix.
 
-## What it does
+Similar to how git lets you reference commits by a prefix of their hash, this crate lets you reference UUIDs by a suffix (tail). Suffix matching works well for UUID versions with high entropy in their trailing bits (v4, v7), where a 7-character tail uniquely identifies one UUID among ~268 million with high probability.
 
-When you have a collection of UUIDs, you often want to reference them by a short suffix rather than typing all 32 hex characters. This is the same approach git uses for commit hashes.
+Note: UUID v1 and v6 embed a MAC address in the last 48 bits, so UUIDs from the same machine share suffixes. For these, you'll need longer tail IDs.
 
 ```rust
 use tail_id::{TailId, resolve_tail_id};
@@ -23,17 +23,7 @@ assert_eq!(found, ids[0]);
 // Use matches() for direct comparison
 let tail: TailId = "eeff".parse().unwrap();
 assert!(tail.matches(&ids[1]));
+
+// Create a tail ID from a UUID for display
+println!("{}", TailId::new(&ids[0]));  // "d3f6a4e"
 ```
-
-## API
-
-- `TailId` - Parsed tail ID for efficient matching (1-32 hex chars, case-insensitive, strips dashes)
-- `resolve_tail_id(iter, tail_id)` - Find the unique UUID matching a `TailId`
-
-Resolution returns `Err(ResolveError::Ambiguous)` if multiple UUIDs match, or `Err(ResolveError::NotFound)` if none do.
-
-## Why suffix matching?
-
-UUID versions like v7 (and v4) have high entropy in their trailing bits, making suffixes good discriminators. A 7-character suffix (28 bits) uniquely identifies one UUID among ~268 million with high probability.
-
-Some UUID versions (v1, v6) embed a MAC address in the last 48 bits, which means UUIDs from the same machine share suffixes. For these, you'll need longer tail IDs or should match against the timestamp portion instead.

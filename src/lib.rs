@@ -100,14 +100,14 @@ impl TryFrom<&[u8]> for TailId {
 
     #[inline]
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let mut buf = [0u8; 32];
+        let mut buf = [0u8; TailId::MAX_LEN as usize];
         let mut len = 0usize;
 
         for &b in bytes {
             if b == b'-' {
                 continue;
             }
-            if len >= 32 {
+            if len >= TailId::MAX_LEN as usize {
                 return Err(ParseError::TooLong);
             }
             if !b.is_ascii_hexdigit() {
