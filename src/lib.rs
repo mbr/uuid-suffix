@@ -134,6 +134,201 @@ impl From<Dandruff> for Uuid {
     }
 }
 
+/// A parsed short ID for efficient suffix matching against UUIDs.
+///
+/// Stores the short ID as a `u128` value with a length field, enabling fast bitwise comparison.
+/// Accepts 1-32 lowercase hex characters (dashes and spaces are stripped during parsing,
+/// uppercase is normalized to lowercase).
+///
+/// # Example
+///
+/// ```
+/// use dandruff::ShortId;
+///
+/// let short: ShortId = "3f6a4e7".parse().unwrap();
+/// assert_eq!(format!("{}", short), "3f6a4e7");
+/// ```
+#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+pub struct ShortId {
+    /// The short ID value, right-aligned (least significant bits).
+    value: u128,
+    /// Number of hex digits (1-32).
+    len: u8,
+}
+
+impl ShortId {
+    /// Minimum number of hex characters required.
+    pub const MIN_LEN: u8 = 1;
+    /// Maximum number of hex characters allowed (full UUID).
+    pub const MAX_LEN: u8 = 32;
+
+    /// Returns the number of hex digits in this short ID.
+    #[inline]
+    pub fn len(&self) -> u8 {
+        self.len
+    }
+
+    /// Returns `true` if this short ID has zero length.
+    ///
+    /// Note: A zero-length ShortId cannot be constructed via `TryFrom`, so this always returns
+    /// `false` for validly constructed instances.
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.len == 0
+    }
+
+    /// Returns the underlying value as a `u128`.
+    ///
+    /// The value is right-aligned: for a 7-character short ID "3f6a4e7", the value is `0x3f6a4e7`.
+    #[inline]
+    pub fn as_u128(&self) -> u128 {
+        self.value
+    }
+
+    /// Checks if this short ID matches the suffix of the given [`Dandruff`].
+    ///
+    /// Comparison is performed via masked `u128` bitwise operations.
+    #[inline]
+    pub fn matches(&self, dandruff: &Dandruff) -> bool {
+        let mask = if self.len == 32 {
+            u128::MAX
+        } else {
+            (1u128 << (self.len as u32 * 4)) - 1
+        };
+        let uuid_bits = dandruff.0.as_u128();
+        (uuid_bits & mask) == self.value
+    }
+}
+
+impl fmt::Display for ShortId {
+    /// Formats the short ID as lowercase hex.
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.len == 0 {
+            return Ok(());
+        }
+        // Format value as hex, then take the last `len` characters
+        // We need to handle leading zeros correctly
+        write!(f, "{:0>width$x}", self.value, width = self.len as usize)
+    }
+}
+
+impl FromStr for ShortId {
+    type Err = ShortIdError;
+
+    /// Parses a [`ShortId`] from a string.
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::try_from(s)
+    }
+}
+
+impl TryFrom<&str> for ShortId {
+    type Error = ShortIdError;
+
+    /// Parses a short ID from a string.
+    ///
+    /// Normalizes input by stripping dashes and spaces, and converting to lowercase.
+    /// Validates that the result is 1-32 lowercase hex characters.
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        // Normalize: strip dashes/spaces, lowercase
+        let mut normalized = [0u8; 32];
+        let mut len = 0usize;
+
+        for c in s.chars() {
+            if c == '-' || c.is_whitespace() {
+                continue;
+            }
+            if len >= 32 {
+                return Err(ShortIdError::TooLong);
+            }
+            let hex_digit = match c {
+                '0'..='9' => c as u8 - b'0',
+                'a'..='f' => c as u8 - b'a' + 10,
+                'A'..='F' => c as u8 - b'A' + 10,
+                _ => return Err(ShortIdError::InvalidCharacter(c)),
+            };
+            normalized[len] = hex_digit;
+            len += 1;
+        }
+
+        if len == 0 {
+            return Err(ShortIdError::Empty);
+        }
+
+        // Build the u128 value from hex digits
+        let mut value = 0u128;
+        for &digit in &normalized[..len] {
+            value = (value << 4) | (digit as u128);
+        }
+
+        Ok(ShortId {
+            value,
+            len: len as u8,
+        })
+    }
+}
+
+impl TryFrom<&[u8]> for ShortId {
+    type Error = ShortIdError;
+
+    /// Parses a short ID from a byte slice.
+    ///
+    /// Normalizes input by stripping dashes and spaces, and converting to lowercase.
+    /// Validates that the result is 1-32 lowercase hex characters.
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        // Normalize: strip dashes/spaces, lowercase
+        let mut normalized = [0u8; 32];
+        let mut len = 0usize;
+
+        for &b in bytes {
+            if b == b'-' || b.is_ascii_whitespace() {
+                continue;
+            }
+            if len >= 32 {
+                return Err(ShortIdError::TooLong);
+            }
+            let hex_digit = match b {
+                b'0'..=b'9' => b - b'0',
+                b'a'..=b'f' => b - b'a' + 10,
+                b'A'..=b'F' => b - b'A' + 10,
+                _ => return Err(ShortIdError::InvalidCharacter(b as char)),
+            };
+            normalized[len] = hex_digit;
+            len += 1;
+        }
+
+        if len == 0 {
+            return Err(ShortIdError::Empty);
+        }
+
+        // Build the u128 value from hex digits
+        let mut value = 0u128;
+        for &digit in &normalized[..len] {
+            value = (value << 4) | (digit as u128);
+        }
+
+        Ok(ShortId {
+            value,
+            len: len as u8,
+        })
+    }
+}
+
+/// Error returned when parsing a [`ShortId`].
+#[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
+pub enum ShortIdError {
+    /// The input is empty after stripping dashes and spaces.
+    #[error("short ID cannot be empty")]
+    Empty,
+
+    /// The input exceeds 32 hex characters.
+    #[error("short ID cannot exceed 32 hex characters")]
+    TooLong,
+
+    /// The input contains a non-hex character.
+    #[error("invalid character in short ID: '{0}'")]
+    InvalidCharacter(char),
+}
+
 /// Error returned when a UUID is not a time-ordered version (v6 or v7).
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 #[error("expected UUID version 6 or 7, got version {version}")]
@@ -157,9 +352,9 @@ pub enum ParseError {
 /// Error returned when resolving a short ID.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum ResolveError {
-    /// The pattern is not a valid hex string or has invalid length.
-    #[error("invalid pattern: must be 4-32 hex characters")]
-    InvalidPattern,
+    /// The pattern could not be parsed as a [`ShortId`].
+    #[error("invalid short ID: {0}")]
+    InvalidShortId(#[source] ShortIdError),
 
     /// No ID matched the pattern.
     #[error("no ID matched the pattern")]
@@ -170,41 +365,19 @@ pub enum ResolveError {
     Ambiguous(Vec<Dandruff>),
 }
 
-/// Resolves a short ID pattern against a collection of IDs.
-///
-/// Accepts 4-32 hex character patterns. Input is normalized: dashes and spaces are stripped,
-/// letters are lowercased. The pattern matches as a substring anywhere in the UUID's hex
-/// representation, though typically the last 7 characters (the short ID) are used.
+/// Resolves a [`ShortId`] against a collection of IDs using suffix matching.
 ///
 /// # Errors
 ///
-/// Returns [`ResolveError::InvalidPattern`] if the pattern is not valid hex or has invalid length.
 /// Returns [`ResolveError::NotFound`] if no ID matches.
 /// Returns [`ResolveError::Ambiguous`] if multiple IDs match, containing all matches.
-pub fn resolve<'a, I>(iter: I, pattern: &str) -> Result<Dandruff, ResolveError>
+pub fn resolve_short_id<'a, I>(iter: I, short_id: &ShortId) -> Result<Dandruff, ResolveError>
 where
     I: IntoIterator<Item = &'a Dandruff>,
 {
-    let normalized: String = pattern
-        .chars()
-        .filter(|c| !c.is_whitespace() && *c != '-')
-        .flat_map(|c| c.to_lowercase())
-        .collect();
-
-    if normalized.len() < 4 || normalized.len() > 32 {
-        return Err(ResolveError::InvalidPattern);
-    }
-
-    if !normalized.chars().all(|c| c.is_ascii_hexdigit()) {
-        return Err(ResolveError::InvalidPattern);
-    }
-
     let matches: Vec<Dandruff> = iter
         .into_iter()
-        .filter(|id| {
-            let hex = id.0.as_simple().to_string();
-            hex.contains(&normalized)
-        })
+        .filter(|id| short_id.matches(id))
         .copied()
         .collect();
 
@@ -213,6 +386,24 @@ where
         1 => Ok(matches[0]),
         _ => Err(ResolveError::Ambiguous(matches)),
     }
+}
+
+/// Resolves a short ID pattern against a collection of IDs using suffix matching.
+///
+/// Parses the pattern as a [`ShortId`] (normalizing dashes, spaces, and case) and matches
+/// against the suffix of each UUID's hex representation.
+///
+/// # Errors
+///
+/// Returns [`ResolveError::InvalidShortId`] if the pattern cannot be parsed.
+/// Returns [`ResolveError::NotFound`] if no ID matches.
+/// Returns [`ResolveError::Ambiguous`] if multiple IDs match, containing all matches.
+pub fn resolve<'a, I>(iter: I, pattern: &str) -> Result<Dandruff, ResolveError>
+where
+    I: IntoIterator<Item = &'a Dandruff>,
+{
+    let short_id = ShortId::try_from(pattern).map_err(ResolveError::InvalidShortId)?;
+    resolve_short_id(iter, &short_id)
 }
 
 #[cfg(test)]
@@ -340,13 +531,17 @@ mod tests {
         );
         let ids = vec![id];
 
+        // Empty pattern
         assert!(matches!(
-            resolve(&ids, "abc"),
-            Err(ResolveError::InvalidPattern)
+            resolve(&ids, ""),
+            Err(ResolveError::InvalidShortId(ShortIdError::Empty))
         ));
+        // Invalid hex characters
         assert!(matches!(
             resolve(&ids, "ghij1234"),
-            Err(ResolveError::InvalidPattern)
+            Err(ResolveError::InvalidShortId(
+                ShortIdError::InvalidCharacter('g')
+            ))
         ));
     }
 
@@ -357,9 +552,89 @@ mod tests {
         );
         let ids = vec![id];
 
+        // Suffix matching with normalization
         assert_eq!(resolve(&ids, "AABBCCDDEEFF"), Ok(id));
-        assert_eq!(resolve(&ids, "aabb-ccdd"), Ok(id));
-        assert_eq!(resolve(&ids, "AABB CCDD"), Ok(id));
+        assert_eq!(resolve(&ids, "CCDD-EEFF"), Ok(id));
+        assert_eq!(resolve(&ids, "ddee ff"), Ok(id));
+    }
+
+    // ShortId tests
+
+    #[test]
+    fn short_id_parse_valid() {
+        let short: ShortId = "3f6a4e7".parse().expect("valid short id");
+        assert_eq!(short.len(), 7);
+        assert_eq!(short.as_u128(), 0x3f6a4e7);
+    }
+
+    #[test]
+    fn short_id_parse_normalizes() {
+        let lower: ShortId = "abcd".parse().expect("valid");
+        let upper: ShortId = "ABCD".parse().expect("valid");
+        let dashes: ShortId = "ab-cd".parse().expect("valid");
+        let spaces: ShortId = "ab cd".parse().expect("valid");
+
+        assert_eq!(lower, upper);
+        assert_eq!(lower, dashes);
+        assert_eq!(lower, spaces);
+    }
+
+    #[test]
+    fn short_id_parse_rejects_empty() {
+        let result = ShortId::try_from("");
+        assert!(matches!(result, Err(ShortIdError::Empty)));
+
+        // Only whitespace/dashes
+        let result = ShortId::try_from("  - - ");
+        assert!(matches!(result, Err(ShortIdError::Empty)));
+    }
+
+    #[test]
+    fn short_id_parse_rejects_too_long() {
+        let result = ShortId::try_from("0123456789abcdef0123456789abcdef0");
+        assert!(matches!(result, Err(ShortIdError::TooLong)));
+    }
+
+    #[test]
+    fn short_id_parse_rejects_invalid_chars() {
+        let result = ShortId::try_from("ghij");
+        assert!(matches!(result, Err(ShortIdError::InvalidCharacter('g'))));
+    }
+
+    #[test]
+    fn short_id_display_roundtrip() {
+        let original = "3f6a4e7";
+        let short: ShortId = original.parse().expect("valid");
+        assert_eq!(format!("{}", short), original);
+    }
+
+    #[test]
+    fn short_id_display_preserves_leading_zeros() {
+        let short: ShortId = "00abcd".parse().expect("valid");
+        assert_eq!(format!("{}", short), "00abcd");
+    }
+
+    #[test]
+    fn short_id_matches_suffix() {
+        let id = Dandruff::from_uuid_unchecked(
+            Uuid::parse_str("01234567-89ab-7def-8000-aabbccddeeff").expect("valid uuid"),
+        );
+
+        let suffix: ShortId = "eeff".parse().expect("valid");
+        assert!(suffix.matches(&id));
+
+        let full: ShortId = "0123456789ab7def8000aabbccddeeff".parse().expect("valid");
+        assert!(full.matches(&id));
+
+        let wrong: ShortId = "ffff".parse().expect("valid");
+        assert!(!wrong.matches(&id));
+    }
+
+    #[test]
+    fn short_id_from_bytes() {
+        let short = ShortId::try_from(b"3f6a4e7".as_slice()).expect("valid");
+        assert_eq!(short.len(), 7);
+        assert_eq!(format!("{}", short), "3f6a4e7");
     }
 }
 
