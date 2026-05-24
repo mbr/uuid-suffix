@@ -63,6 +63,7 @@ impl fmt::Display for TailId {
 impl FromStr for TailId {
     type Err = ParseError;
 
+    #[inline]
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         Self::try_from(s)
     }
@@ -71,6 +72,7 @@ impl FromStr for TailId {
 impl TryFrom<&[u8]> for TailId {
     type Error = ParseError;
 
+    #[inline]
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
         let mut buf = [0u8; 32];
         let mut len = 0usize;
@@ -108,9 +110,7 @@ impl TryFrom<&[u8]> for TailId {
 impl TryFrom<&str> for TailId {
     type Error = ParseError;
 
-    /// Parses a tail ID from a string.
-    ///
-    /// Strips dashes and spaces, normalizes to lowercase. Accepts 1-32 hex characters.
+    #[inline]
     fn try_from(s: &str) -> Result<Self, Self::Error> {
         Self::try_from(s.as_bytes())
     }
