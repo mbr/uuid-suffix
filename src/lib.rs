@@ -9,43 +9,43 @@ use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use uuid::Uuid;
 
-/// A parsed tail ID for efficient suffix matching against UUIDs.
+/// A parsed UUID suffix for efficient suffix matching against UUIDs.
 ///
-/// Stores the tail ID as a `u128` value with a length field, enabling fast bitwise comparison.
+/// Stores the UUID suffix as a `u128` value with a length field, enabling fast bitwise comparison.
 /// Accepts 1 to 32 hex characters (dashes are stripped during parsing, case-insensitive).
 ///
 /// # Example
 ///
 /// ```
-/// use tail_id::TailId;
+/// use uuid_suffix::UuidSuffix;
 ///
-/// let tail: TailId = "3f6a4e7".parse().unwrap();
-/// assert_eq!(format!("{}", tail), "3f6a4e7");
+/// let suffix: UuidSuffix = "3f6a4e7".parse().unwrap();
+/// assert_eq!(format!("{}", suffix), "3f6a4e7");
 /// ```
 #[allow(clippy::len_without_is_empty)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
-pub struct TailId {
+pub struct UuidSuffix {
     /// Number of hex digits (MIN_LEN to MAX_LEN).
     len: u8,
-    /// The tail ID value, right-aligned (least significant bits).
+    /// The UUID suffix value, right-aligned (least significant bits).
     value: u128,
 }
 
-impl TailId {
+impl UuidSuffix {
     /// Minimum number of hex characters required.
     pub const MIN_LEN: u8 = 1;
     /// Maximum number of hex characters allowed (full UUID).
     pub const MAX_LEN: u8 = 32;
-    /// Standard length for tail IDs (7 hex chars = 28 bits).
+    /// Standard length for UUID suffixes (7 hex chars = 28 bits).
     pub const STANDARD_LEN: u8 = 7;
 
-    /// Creates a tail ID from a UUID with the standard length (7 hex chars).
+    /// Creates a UUID suffix from a UUID with the standard length (7 hex chars).
     #[inline]
     pub fn new(uuid: &Uuid) -> Self {
         Self::with_len(uuid, Self::STANDARD_LEN)
     }
 
-    /// Creates a tail ID from a UUID with the specified length.
+    /// Creates a UUID suffix from a UUID with the specified length.
     ///
     /// # Panics
     ///
@@ -53,19 +53,19 @@ impl TailId {
     #[inline]
     pub fn with_len(uuid: &Uuid, len: u8) -> Self {
         assert!((Self::MIN_LEN..=Self::MAX_LEN).contains(&len));
-        TailId {
+        UuidSuffix {
             value: uuid.as_u128() & Self::mask(len),
             len,
         }
     }
 
-    /// Returns the number of hex digits in this tail ID.
+    /// Returns the number of hex digits in this UUID suffix.
     #[inline]
     pub fn len(&self) -> u8 {
         self.len
     }
 
-    /// Checks if this tail ID matches the suffix of the given UUID.
+    /// Checks if this UUID suffix matches the suffix of the given UUID.
     #[inline]
     pub fn matches(&self, uuid: &Uuid) -> bool {
         // Note: `Uuid::as_u128` packs the rightmost bytes of the UUID into the LSBs,
@@ -84,13 +84,13 @@ impl TailId {
     }
 }
 
-impl fmt::Display for TailId {
+impl fmt::Display for UuidSuffix {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{:0>width$x}", self.value, width = self.len as usize)
     }
 }
 
-impl FromStr for TailId {
+impl FromStr for UuidSuffix {
     type Err = ParseError;
 
     #[inline]
@@ -99,19 +99,19 @@ impl FromStr for TailId {
     }
 }
 
-impl TryFrom<&[u8]> for TailId {
+impl TryFrom<&[u8]> for UuidSuffix {
     type Error = ParseError;
 
     #[inline]
     fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let mut buf = [0u8; TailId::MAX_LEN as usize];
+        let mut buf = [0u8; UuidSuffix::MAX_LEN as usize];
         let mut len = 0usize;
 
         for &b in bytes {
             if b == b'-' {
                 continue;
             }
-            if len >= TailId::MAX_LEN as usize {
+            if len >= UuidSuffix::MAX_LEN as usize {
                 return Err(ParseError::TooLong);
             }
             if !b.is_ascii_hexdigit() {
@@ -130,14 +130,14 @@ impl TryFrom<&[u8]> for TailId {
         let value =
             u128::from_str_radix(s, 16).expect("input validated as hex digits, cannot fail");
 
-        Ok(TailId {
+        Ok(UuidSuffix {
             value,
             len: len as u8,
         })
     }
 }
 
-impl TryFrom<&str> for TailId {
+impl TryFrom<&str> for UuidSuffix {
     type Error = ParseError;
 
     #[inline]
@@ -146,7 +146,7 @@ impl TryFrom<&str> for TailId {
     }
 }
 
-/// Error returned when parsing a [`TailId`].
+/// Error returned when parsing a [`UuidSuffix`].
 #[derive(Clone, Copy, Debug, Eq, Error, PartialEq)]
 pub enum ParseError {
     /// The input is empty after stripping dashes.
@@ -162,7 +162,7 @@ pub enum ParseError {
     InvalidByte(u8),
 }
 
-/// Error returned when resolving a tail ID.
+/// Error returned when resolving a UUID suffix.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum ResolveError {
     /// No UUID matched the pattern.
@@ -175,14 +175,14 @@ pub enum ResolveError {
 }
 
 #[cfg(feature = "serde")]
-impl Serialize for TailId {
+impl Serialize for UuidSuffix {
     fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
         serializer.collect_str(self)
     }
 }
 
 #[cfg(feature = "serde")]
-impl<'de> Deserialize<'de> for TailId {
+impl<'de> Deserialize<'de> for UuidSuffix {
     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let s = <&str>::deserialize(deserializer)?;
         s.parse().map_err(de::Error::custom)
@@ -190,9 +190,9 @@ impl<'de> Deserialize<'de> for TailId {
 }
 
 #[cfg(feature = "schemars")]
-impl JsonSchema for TailId {
+impl JsonSchema for UuidSuffix {
     fn schema_name() -> String {
-        "TailId".to_owned()
+        "UuidSuffix".to_owned()
     }
 
     fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
@@ -209,14 +209,14 @@ impl JsonSchema for TailId {
     }
 }
 
-/// Resolves a [`TailId`] against a collection of UUIDs.
+/// Resolves a [`UuidSuffix`] against a collection of UUIDs.
 ///
 /// Returns the unique matching UUID, or an error if zero or multiple UUIDs match.
-pub fn resolve_tail_id<'a, I>(iter: I, tail_id: &TailId) -> Result<Uuid, ResolveError>
+pub fn resolve_uuid_suffix<'a, I>(iter: I, uuid_suffix: &UuidSuffix) -> Result<Uuid, ResolveError>
 where
     I: IntoIterator<Item = &'a Uuid>,
 {
-    let mut iter = iter.into_iter().filter(|id| tail_id.matches(id));
+    let mut iter = iter.into_iter().filter(|id| uuid_suffix.matches(id));
 
     let first = *iter.next().ok_or(ResolveError::NotFound)?;
 
@@ -235,46 +235,49 @@ mod tests {
 
     #[test]
     fn parse_normalizes() {
-        let lower: TailId = "abcd".parse().unwrap();
-        let upper: TailId = "ABCD".parse().unwrap();
-        let dashes: TailId = "ab-cd".parse().unwrap();
+        let lower: UuidSuffix = "abcd".parse().unwrap();
+        let upper: UuidSuffix = "ABCD".parse().unwrap();
+        let dashes: UuidSuffix = "ab-cd".parse().unwrap();
         assert_eq!(lower, upper);
         assert_eq!(lower, dashes);
     }
 
     #[test]
     fn parse_rejects_invalid() {
-        assert!(matches!(TailId::try_from(""), Err(ParseError::Empty)));
-        assert!(matches!(TailId::try_from("---"), Err(ParseError::Empty)));
+        assert!(matches!(UuidSuffix::try_from(""), Err(ParseError::Empty)));
         assert!(matches!(
-            TailId::try_from("0123456789abcdef0123456789abcdef0"),
+            UuidSuffix::try_from("---"),
+            Err(ParseError::Empty)
+        ));
+        assert!(matches!(
+            UuidSuffix::try_from("0123456789abcdef0123456789abcdef0"),
             Err(ParseError::TooLong)
         ));
         assert!(matches!(
-            TailId::try_from("ghij"),
+            UuidSuffix::try_from("ghij"),
             Err(ParseError::InvalidByte(b'g'))
         ));
     }
 
     #[test]
     fn display() {
-        let tail: TailId = "3f6a4e7".parse().unwrap();
-        assert_eq!(format!("{tail}"), "3f6a4e7");
+        let suffix: UuidSuffix = "3f6a4e7".parse().unwrap();
+        assert_eq!(format!("{suffix}"), "3f6a4e7");
 
-        let tail: TailId = "00abcd".parse().unwrap();
-        assert_eq!(format!("{tail}"), "00abcd");
+        let suffix: UuidSuffix = "00abcd".parse().unwrap();
+        assert_eq!(format!("{suffix}"), "00abcd");
     }
 
     #[test]
     fn matches_suffix() {
         let uuid = Uuid::parse_str("01234567-89ab-7def-8000-aabbccddeeff").unwrap();
-        assert!(TailId::try_from("eeff").unwrap().matches(&uuid));
+        assert!(UuidSuffix::try_from("eeff").unwrap().matches(&uuid));
         assert!(
-            TailId::try_from("0123456789ab7def8000aabbccddeeff")
+            UuidSuffix::try_from("0123456789ab7def8000aabbccddeeff")
                 .unwrap()
                 .matches(&uuid)
         );
-        assert!(!TailId::try_from("ffff").unwrap().matches(&uuid));
+        assert!(!UuidSuffix::try_from("ffff").unwrap().matches(&uuid));
     }
 
     #[test]
@@ -284,17 +287,23 @@ mod tests {
         let ids = vec![id1, id2];
 
         // Unique match
-        assert_eq!(resolve_tail_id(&ids, &"11112222".parse().unwrap()), Ok(id1));
-        assert_eq!(resolve_tail_id(&ids, &"33332222".parse().unwrap()), Ok(id2));
+        assert_eq!(
+            resolve_uuid_suffix(&ids, &"11112222".parse().unwrap()),
+            Ok(id1)
+        );
+        assert_eq!(
+            resolve_uuid_suffix(&ids, &"33332222".parse().unwrap()),
+            Ok(id2)
+        );
 
         // Not found
         assert!(matches!(
-            resolve_tail_id(&ids, &"ffff".parse().unwrap()),
+            resolve_uuid_suffix(&ids, &"ffff".parse().unwrap()),
             Err(ResolveError::NotFound)
         ));
 
         // Ambiguous (both end in 2222)
-        let result = resolve_tail_id(&ids, &"2222".parse().unwrap());
+        let result = resolve_uuid_suffix(&ids, &"2222".parse().unwrap());
         assert!(matches!(result, Err(ResolveError::Ambiguous(v)) if v.len() == 2));
     }
 }

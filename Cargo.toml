@@ -1,10 +1,10 @@
 [package]
-name = "tail-id"
+name = "uuid-suffix"
 description = "Resolve partial UUIDs against collections using suffix matching"
 version = "0.1.0"
 edition = "2024"
 license = "MIT"
-repository = "https://github.com/mbr/tail-id"
+repository = "https://github.com/mbr/uuid-suffix"
 
 [features]
 default = []

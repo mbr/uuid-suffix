@@ -316,16 +316,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tail-id"
-version = "0.1.0"
-dependencies = [
- "schemars",
- "serde",
- "thiserror",
- "uuid",
-]
-
-[[package]]
 name = "thiserror"
 version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -366,6 +356,16 @@ dependencies = [
  "getrandom",
  "js-sys",
  "wasm-bindgen",
+]
+
+[[package]]
+name = "uuid-suffix"
+version = "0.1.0"
+dependencies = [
+ "schemars",
+ "serde",
+ "thiserror",
+ "uuid",
 ]
 
 [[package]]
