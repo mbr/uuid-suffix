@@ -55,9 +55,6 @@ impl TailId {
 
 impl fmt::Display for TailId {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.len == 0 {
-            return Ok(());
-        }
         write!(f, "{:0>width$x}", self.value, width = self.len as usize)
     }
 }
