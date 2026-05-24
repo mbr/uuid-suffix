@@ -154,17 +154,17 @@ pub fn resolve_tail_id<'a, I>(iter: I, tail_id: &TailId) -> Result<Uuid, Resolve
 where
     I: IntoIterator<Item = &'a Uuid>,
 {
-    let matches: Vec<Uuid> = iter
-        .into_iter()
-        .filter(|id| tail_id.matches(id))
-        .copied()
-        .collect();
+    let mut iter = iter.into_iter().filter(|id| tail_id.matches(id));
 
-    match matches.len() {
-        0 => Err(ResolveError::NotFound),
-        1 => Ok(matches[0]),
-        _ => Err(ResolveError::Ambiguous(matches)),
-    }
+    let first = *iter.next().ok_or(ResolveError::NotFound)?;
+
+    let Some(&second) = iter.next() else {
+        return Ok(first);
+    };
+
+    let mut matches = vec![first, second];
+    matches.extend(iter.copied());
+    Err(ResolveError::Ambiguous(matches))
 }
 
 /// Resolves a tail ID pattern against a collection of UUIDs.
