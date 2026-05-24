@@ -32,6 +32,33 @@ impl TailId {
     pub const MIN_LEN: u8 = 1;
     /// Maximum number of hex characters allowed (full UUID).
     pub const MAX_LEN: u8 = 32;
+    /// Standard length for tail IDs (7 hex chars = 28 bits).
+    pub const STANDARD_LEN: u8 = 7;
+
+    /// Creates a tail ID from a UUID with the standard length (7 hex chars).
+    #[inline]
+    pub fn new(uuid: &Uuid) -> Self {
+        Self::with_len(uuid, Self::STANDARD_LEN)
+    }
+
+    /// Creates a tail ID from a UUID with the specified length.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `len` is 0 or greater than 32.
+    #[inline]
+    pub fn with_len(uuid: &Uuid, len: u8) -> Self {
+        assert!((Self::MIN_LEN..=Self::MAX_LEN).contains(&len));
+        let mask = if len == 32 {
+            u128::MAX
+        } else {
+            (1u128 << (len as u32 * 4)) - 1
+        };
+        TailId {
+            value: uuid.as_u128() & mask,
+            len,
+        }
+    }
 
     /// Returns the number of hex digits in this tail ID.
     #[inline]
