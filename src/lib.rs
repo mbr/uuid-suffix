@@ -68,30 +68,24 @@ impl FromStr for TailId {
     }
 }
 
-impl TryFrom<&str> for TailId {
+impl TryFrom<&[u8]> for TailId {
     type Error = ParseError;
 
-    /// Parses a tail ID from a string.
-    ///
-    /// Strips dashes and whitespace, normalizes to lowercase. Accepts 1-32 hex characters.
-    fn try_from(s: &str) -> Result<Self, Self::Error> {
-        let mut normalized = [0u8; 32];
+    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
+        let mut buf = [0u8; 32];
         let mut len = 0usize;
 
-        for c in s.chars() {
-            if c == '-' || c.is_whitespace() {
+        for &b in bytes {
+            if b == b'-' || b == b' ' {
                 continue;
             }
             if len >= 32 {
                 return Err(ParseError::TooLong);
             }
-            let hex_digit = match c {
-                '0'..='9' => c as u8 - b'0',
-                'a'..='f' => c as u8 - b'a' + 10,
-                'A'..='F' => c as u8 - b'A' + 10,
-                _ => return Err(ParseError::InvalidCharacter(c)),
-            };
-            normalized[len] = hex_digit;
+            if !b.is_ascii_hexdigit() {
+                return Err(ParseError::InvalidByte(b));
+            }
+            buf[len] = b.to_ascii_lowercase();
             len += 1;
         }
 
@@ -99,10 +93,10 @@ impl TryFrom<&str> for TailId {
             return Err(ParseError::Empty);
         }
 
-        let mut value = 0u128;
-        for &digit in &normalized[..len] {
-            value = (value << 4) | (digit as u128);
-        }
+        // SAFETY: buf contains only ASCII hex digits, which are valid UTF-8.
+        let s = unsafe { std::str::from_utf8_unchecked(&buf[..len]) };
+        let value =
+            u128::from_str_radix(s, 16).expect("input validated as hex digits, cannot fail");
 
         Ok(TailId {
             value,
@@ -111,46 +105,14 @@ impl TryFrom<&str> for TailId {
     }
 }
 
-impl TryFrom<&[u8]> for TailId {
+impl TryFrom<&str> for TailId {
     type Error = ParseError;
 
-    /// Parses a tail ID from a byte slice.
+    /// Parses a tail ID from a string.
     ///
-    /// Strips dashes and whitespace, normalizes to lowercase. Accepts 1-32 hex characters.
-    fn try_from(bytes: &[u8]) -> Result<Self, Self::Error> {
-        let mut normalized = [0u8; 32];
-        let mut len = 0usize;
-
-        for &b in bytes {
-            if b == b'-' || b.is_ascii_whitespace() {
-                continue;
-            }
-            if len >= 32 {
-                return Err(ParseError::TooLong);
-            }
-            let hex_digit = match b {
-                b'0'..=b'9' => b - b'0',
-                b'a'..=b'f' => b - b'a' + 10,
-                b'A'..=b'F' => b - b'A' + 10,
-                _ => return Err(ParseError::InvalidCharacter(b as char)),
-            };
-            normalized[len] = hex_digit;
-            len += 1;
-        }
-
-        if len == 0 {
-            return Err(ParseError::Empty);
-        }
-
-        let mut value = 0u128;
-        for &digit in &normalized[..len] {
-            value = (value << 4) | (digit as u128);
-        }
-
-        Ok(TailId {
-            value,
-            len: len as u8,
-        })
+    /// Strips dashes and spaces, normalizes to lowercase. Accepts 1-32 hex characters.
+    fn try_from(s: &str) -> Result<Self, Self::Error> {
+        Self::try_from(s.as_bytes())
     }
 }
 
@@ -165,9 +127,9 @@ pub enum ParseError {
     #[error("tail ID cannot exceed 32 hex characters")]
     TooLong,
 
-    /// The input contains a non-hex character.
-    #[error("invalid character in tail ID: '{0}'")]
-    InvalidCharacter(char),
+    /// The input contains a non-hex byte.
+    #[error("invalid byte in tail ID: 0x{0:02x}")]
+    InvalidByte(u8),
 }
 
 /// Error returned when resolving a tail ID.
@@ -252,10 +214,10 @@ mod tests {
     }
 
     #[test]
-    fn parse_rejects_invalid_chars() {
+    fn parse_rejects_invalid_bytes() {
         assert!(matches!(
             TailId::try_from("ghij"),
-            Err(ParseError::InvalidCharacter('g'))
+            Err(ParseError::InvalidByte(b'g'))
         ));
     }
 
