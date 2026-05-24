@@ -21,10 +21,10 @@ use uuid::Uuid;
 #[allow(clippy::len_without_is_empty)]
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct TailId {
-    /// The tail ID value, right-aligned (least significant bits).
-    value: u128,
     /// Number of hex digits (MIN_LEN to MAX_LEN).
     len: u8,
+    /// The tail ID value, right-aligned (least significant bits).
+    value: u128,
 }
 
 impl TailId {
