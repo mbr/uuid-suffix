@@ -229,6 +229,116 @@ mod arbitrary_impl {
     }
 }
 
+// --- Database integrations ---
+
+#[cfg(feature = "sqlx-postgres")]
+mod sqlx_postgres_impl {
+    use sqlx::{
+        Decode, Encode, Postgres, Type,
+        postgres::{PgArgumentBuffer, PgHasArrayType, PgTypeInfo, PgValueRef},
+    };
+
+    use super::*;
+
+    impl Type<Postgres> for Dandruff {
+        fn type_info() -> PgTypeInfo {
+            <Uuid as Type<Postgres>>::type_info()
+        }
+
+        fn compatible(ty: &PgTypeInfo) -> bool {
+            <Uuid as Type<Postgres>>::compatible(ty)
+        }
+    }
+
+    impl PgHasArrayType for Dandruff {
+        fn array_type_info() -> PgTypeInfo {
+            <Uuid as PgHasArrayType>::array_type_info()
+        }
+    }
+
+    impl Encode<'_, Postgres> for Dandruff {
+        fn encode_by_ref(
+            &self,
+            buf: &mut PgArgumentBuffer,
+        ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+            <Uuid as Encode<'_, Postgres>>::encode_by_ref(&self.0, buf)
+        }
+    }
+
+    impl Decode<'_, Postgres> for Dandruff {
+        fn decode(value: PgValueRef<'_>) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+            let uuid = <Uuid as Decode<'_, Postgres>>::decode(value)?;
+            Ok(Dandruff::from_uuid_unchecked(uuid))
+        }
+    }
+}
+
+#[cfg(feature = "sqlx-sqlite")]
+mod sqlx_sqlite_impl {
+    use sqlx::{
+        Decode, Encode, Sqlite, Type,
+        sqlite::{SqliteArgumentValue, SqliteTypeInfo, SqliteValueRef},
+    };
+
+    use super::*;
+
+    impl Type<Sqlite> for Dandruff {
+        fn type_info() -> SqliteTypeInfo {
+            <Uuid as Type<Sqlite>>::type_info()
+        }
+
+        fn compatible(ty: &SqliteTypeInfo) -> bool {
+            <Uuid as Type<Sqlite>>::compatible(ty)
+        }
+    }
+
+    impl<'q> Encode<'q, Sqlite> for Dandruff {
+        fn encode_by_ref(
+            &self,
+            args: &mut Vec<SqliteArgumentValue<'q>>,
+        ) -> Result<sqlx::encode::IsNull, Box<dyn std::error::Error + Send + Sync>> {
+            <Uuid as Encode<'q, Sqlite>>::encode_by_ref(&self.0, args)
+        }
+    }
+
+    impl Decode<'_, Sqlite> for Dandruff {
+        fn decode(
+            value: SqliteValueRef<'_>,
+        ) -> Result<Self, Box<dyn std::error::Error + Send + Sync>> {
+            let uuid = <Uuid as Decode<'_, Sqlite>>::decode(value)?;
+            Ok(Dandruff::from_uuid_unchecked(uuid))
+        }
+    }
+}
+
+#[cfg(feature = "datafusion")]
+mod datafusion_impl {
+    use arrow_schema::DataType;
+
+    use super::*;
+
+    impl Dandruff {
+        /// The Arrow data type for [`Dandruff`] values.
+        ///
+        /// Returns `FixedSizeBinary(16)` for efficient storage of UUIDs.
+        pub const ARROW_DATA_TYPE: DataType = DataType::FixedSizeBinary(16);
+
+        /// Converts to Arrow-compatible bytes.
+        #[inline]
+        pub fn to_arrow_bytes(&self) -> [u8; 16] {
+            *self.0.as_bytes()
+        }
+
+        /// Creates a [`Dandruff`] from Arrow bytes.
+        ///
+        /// Does not validate UUID version.
+        #[inline]
+        pub fn from_arrow_bytes(bytes: [u8; 16]) -> Self {
+            Self::from_uuid_unchecked(Uuid::from_bytes(bytes))
+        }
+    }
+}
+
 /// A parsed short ID for efficient suffix matching against UUIDs.
 ///
 /// Stores the short ID as a `u128` value with a length field, enabling fast bitwise comparison.
@@ -795,5 +905,25 @@ mod borsh_tests {
         assert_eq!(bytes.len(), 16);
         let parsed = Dandruff::deserialize(&mut bytes.as_slice()).expect("deserialize");
         assert_eq!(id, parsed);
+    }
+}
+
+#[cfg(all(test, feature = "datafusion", feature = "v7"))]
+mod datafusion_tests {
+    use arrow_schema::DataType;
+
+    use super::*;
+
+    #[test]
+    fn arrow_data_type() {
+        assert_eq!(Dandruff::ARROW_DATA_TYPE, DataType::FixedSizeBinary(16));
+    }
+
+    #[test]
+    fn arrow_bytes_roundtrip() {
+        let id = Dandruff::new_v7();
+        let bytes = id.to_arrow_bytes();
+        let restored = Dandruff::from_arrow_bytes(bytes);
+        assert_eq!(id, restored);
     }
 }

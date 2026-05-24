@@ -8,9 +8,11 @@ repository = "https://github.com/mbr/dandruff-rs"
 
 [dependencies]
 arbitrary = { version = "1", optional = true }
+arrow-schema = { version = "55", optional = true }
 borsh = { version = "1", optional = true }
 bytemuck = { version = "1", optional = true }
 serde = { version = "1", optional = true }
+sqlx = { version = "0.8", optional = true, default-features = false }
 thiserror = "2"
 uuid = { version = "1" }
 
@@ -31,3 +33,6 @@ serde = ["dep:serde", "uuid/serde"]
 borsh = ["dep:borsh", "uuid/borsh"]
 bytemuck = ["dep:bytemuck", "uuid/bytemuck"]
 arbitrary = ["dep:arbitrary", "uuid/arbitrary"]
+sqlx-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/uuid"]
+sqlx-sqlite = ["dep:sqlx", "sqlx/sqlite", "sqlx/uuid"]
+datafusion = ["dep:arrow-schema"]
