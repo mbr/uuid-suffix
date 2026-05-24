@@ -19,7 +19,7 @@ use uuid::Uuid;
 /// assert_eq!(format!("{}", tail), "3f6a4e7");
 /// ```
 #[allow(clippy::len_without_is_empty)]
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
+#[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialOrd, PartialEq)]
 pub struct TailId {
     /// The tail ID value, right-aligned (least significant bits).
     value: u128,
