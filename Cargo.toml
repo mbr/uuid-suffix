@@ -11,6 +11,11 @@ arbitrary = { version = "1", optional = true }
 arrow-schema = { version = "55", optional = true }
 borsh = { version = "1", optional = true }
 bytemuck = { version = "1", optional = true }
+chrono = { version = "0.4", optional = true, default-features = false, features = ["std", "clock"] }
+clap = { version = "4", optional = true }
+jiff = { version = "0.2", optional = true }
+proptest = { version = "1", optional = true }
+schemars = { version = "0.8", optional = true }
 serde = { version = "1", optional = true }
 sqlx = { version = "0.8", optional = true, default-features = false }
 thiserror = "2"
@@ -36,3 +41,8 @@ arbitrary = ["dep:arbitrary", "uuid/arbitrary"]
 sqlx-postgres = ["dep:sqlx", "sqlx/postgres", "sqlx/uuid"]
 sqlx-sqlite = ["dep:sqlx", "sqlx/sqlite", "sqlx/uuid"]
 datafusion = ["dep:arrow-schema"]
+chrono = ["dep:chrono"]
+jiff = ["dep:jiff"]
+clap = ["dep:clap"]
+proptest = ["dep:proptest"]
+schemars = ["dep:schemars", "serde"]

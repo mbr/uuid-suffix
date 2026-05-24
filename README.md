@@ -71,13 +71,18 @@ assert_eq!(matched, target);
 
 **Serialization:**
 - `serde`: Serialize/deserialize (efficient binary format for non-human-readable)
+- `borsh`: Borsh serialization
+- `bytemuck`: Pod/Zeroable traits
 - `sqlx-postgres`: PostgreSQL integration via sqlx
 - `sqlx-sqlite`: SQLite integration via sqlx
 - `datafusion`: Arrow/DataFusion integration
 
 **Utilities:**
+- `chrono`: Timestamp extraction as `chrono::DateTime<Utc>`
 - `jiff`: Timestamp extraction as `jiff::Timestamp`
 - `clap`: CLI argument parsing
+- `proptest`: Property-based testing support
+- `schemars`: JSON Schema generation
 
 **Passed through to `uuid`:**
-- `fast-rng`, `rng-rand`, `rng-getrandom`, `js`
+- `arbitrary`, `fast-rng`, `rng-rand`, `rng-getrandom`, `js`

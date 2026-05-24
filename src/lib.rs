@@ -339,6 +339,139 @@ mod datafusion_impl {
     }
 }
 
+// --- Timestamp extraction ---
+
+#[cfg(feature = "chrono")]
+mod chrono_impl {
+    use chrono::{DateTime, TimeZone, Utc};
+
+    use super::*;
+
+    impl Dandruff {
+        /// Extracts the timestamp from this UUID as a [`chrono::DateTime<Utc>`].
+        ///
+        /// Returns `None` if the UUID does not contain a valid timestamp (non-v6/v7).
+        pub fn chrono_datetime(&self) -> Option<DateTime<Utc>> {
+            let ts = self.0.get_timestamp()?;
+            let (secs, nanos) = ts.to_unix();
+            Utc.timestamp_opt(secs as i64, nanos).single()
+        }
+    }
+}
+
+#[cfg(feature = "jiff")]
+mod jiff_impl {
+    use jiff::Timestamp;
+
+    use super::*;
+
+    impl Dandruff {
+        /// Extracts the timestamp from this UUID as a [`jiff::Timestamp`].
+        ///
+        /// Returns `None` if the UUID does not contain a valid timestamp (non-v6/v7).
+        pub fn jiff_timestamp(&self) -> Option<Timestamp> {
+            let ts = self.0.get_timestamp()?;
+            let (secs, nanos) = ts.to_unix();
+            Timestamp::new(secs as i64, nanos as i32).ok()
+        }
+    }
+}
+
+// --- CLI and schema integrations ---
+
+#[cfg(feature = "clap")]
+mod clap_impl {
+    use std::ffi::OsStr;
+
+    use clap::builder::{StringValueParser, TypedValueParser, ValueParserFactory};
+
+    use super::*;
+
+    /// Value parser for [`Dandruff`] that accepts full UUID strings.
+    #[derive(Clone, Debug)]
+    pub struct DandruffValueParser;
+
+    impl TypedValueParser for DandruffValueParser {
+        type Value = Dandruff;
+
+        fn parse_ref(
+            &self,
+            cmd: &clap::Command,
+            arg: Option<&clap::Arg>,
+            value: &OsStr,
+        ) -> Result<Self::Value, clap::Error> {
+            let s = StringValueParser::new().parse_ref(cmd, arg, value)?;
+            s.parse::<Dandruff>().map_err(|e| {
+                clap::Error::raw(clap::error::ErrorKind::InvalidValue, format!("{e}\n"))
+            })
+        }
+    }
+
+    impl ValueParserFactory for Dandruff {
+        type Parser = DandruffValueParser;
+
+        fn value_parser() -> Self::Parser {
+            DandruffValueParser
+        }
+    }
+}
+
+#[cfg(feature = "proptest")]
+mod proptest_impl {
+    use proptest::{
+        arbitrary::Arbitrary,
+        strategy::{BoxedStrategy, Strategy},
+    };
+
+    use super::*;
+
+    impl Arbitrary for Dandruff {
+        type Parameters = ();
+        type Strategy = BoxedStrategy<Self>;
+
+        /// Generates arbitrary [`Dandruff`] values by wrapping arbitrary UUIDs.
+        ///
+        /// Note: The generated UUID may not be a valid v6 or v7 UUID.
+        fn arbitrary_with(_args: Self::Parameters) -> Self::Strategy {
+            proptest::array::uniform16(proptest::num::u8::ANY)
+                .prop_map(|bytes| Dandruff::from_uuid_unchecked(Uuid::from_bytes(bytes)))
+                .boxed()
+        }
+    }
+}
+
+#[cfg(feature = "schemars")]
+mod schemars_impl {
+    use schemars::{
+        JsonSchema,
+        r#gen::SchemaGenerator,
+        schema::{InstanceType, Schema, SchemaObject, StringValidation},
+    };
+
+    use super::*;
+
+    impl JsonSchema for Dandruff {
+        fn schema_name() -> String {
+            "Dandruff".to_string()
+        }
+
+        fn json_schema(_generator: &mut SchemaGenerator) -> Schema {
+            Schema::Object(SchemaObject {
+                instance_type: Some(InstanceType::String.into()),
+                format: Some("uuid".to_string()),
+                string: Some(Box::new(StringValidation {
+                    pattern: Some(
+                        "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[67][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$"
+                            .to_string(),
+                    ),
+                    ..Default::default()
+                })),
+                ..Default::default()
+            })
+        }
+    }
+}
+
 /// A parsed short ID for efficient suffix matching against UUIDs.
 ///
 /// Stores the short ID as a `u128` value with a length field, enabling fast bitwise comparison.
@@ -925,5 +1058,68 @@ mod datafusion_tests {
         let bytes = id.to_arrow_bytes();
         let restored = Dandruff::from_arrow_bytes(bytes);
         assert_eq!(id, restored);
+    }
+}
+
+#[cfg(all(test, feature = "chrono", feature = "v7"))]
+mod chrono_tests {
+    use super::*;
+
+    #[test]
+    fn chrono_datetime_extracts_timestamp() {
+        let id = Dandruff::new_v7();
+        let dt = id.chrono_datetime();
+        assert!(dt.is_some());
+        let dt = dt.expect("should have timestamp");
+        let now = chrono::Utc::now();
+        let diff = (now - dt).num_seconds().abs();
+        assert!(diff < 2, "timestamp should be within 2 seconds of now");
+    }
+
+    #[test]
+    fn chrono_datetime_returns_none_for_non_time_uuid() {
+        let nil = Dandruff::from_uuid_unchecked(uuid::Uuid::nil());
+        assert!(nil.chrono_datetime().is_none());
+    }
+}
+
+#[cfg(all(test, feature = "jiff", feature = "v7"))]
+mod jiff_tests {
+    use super::*;
+
+    #[test]
+    fn jiff_timestamp_extracts_timestamp() {
+        let id = Dandruff::new_v7();
+        let ts = id.jiff_timestamp();
+        assert!(ts.is_some());
+        let ts = ts.expect("should have timestamp");
+        let now = jiff::Timestamp::now();
+        let diff = (now - ts).get_seconds().abs();
+        assert!(diff < 2, "timestamp should be within 2 seconds of now");
+    }
+
+    #[test]
+    fn jiff_timestamp_returns_none_for_non_time_uuid() {
+        let nil = Dandruff::from_uuid_unchecked(uuid::Uuid::nil());
+        assert!(nil.jiff_timestamp().is_none());
+    }
+}
+
+#[cfg(all(test, feature = "schemars"))]
+mod schemars_tests {
+    use schemars::JsonSchema;
+
+    use super::*;
+
+    #[test]
+    fn json_schema_name() {
+        assert_eq!(Dandruff::schema_name(), "Dandruff");
+    }
+
+    #[test]
+    fn json_schema_has_uuid_format() {
+        let schema = schemars::schema_for!(Dandruff);
+        let json = serde_json::to_string(&schema).expect("serialize schema");
+        assert!(json.contains("\"format\":\"uuid\""));
     }
 }
