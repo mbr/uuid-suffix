@@ -2,6 +2,10 @@
 
 use std::{fmt, str::FromStr};
 
+#[cfg(feature = "schemars")]
+use schemars::JsonSchema;
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de};
 use thiserror::Error;
 use uuid::Uuid;
 
@@ -168,6 +172,41 @@ pub enum ResolveError {
     /// Multiple UUIDs matched the pattern.
     #[error("pattern is ambiguous, matched {} UUIDs", .0.len())]
     Ambiguous(Vec<Uuid>),
+}
+
+#[cfg(feature = "serde")]
+impl Serialize for TailId {
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.collect_str(self)
+    }
+}
+
+#[cfg(feature = "serde")]
+impl<'de> Deserialize<'de> for TailId {
+    fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = <&str>::deserialize(deserializer)?;
+        s.parse().map_err(de::Error::custom)
+    }
+}
+
+#[cfg(feature = "schemars")]
+impl JsonSchema for TailId {
+    fn schema_name() -> String {
+        "TailId".to_owned()
+    }
+
+    fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
+        use schemars::schema::{InstanceType, SchemaObject, StringValidation};
+
+        let mut schema = SchemaObject::default();
+        schema.instance_type = Some(InstanceType::String.into());
+        schema.string = Some(Box::new(StringValidation {
+            pattern: Some("^[0-9a-fA-F-]{1,36}$".to_owned()),
+            ..Default::default()
+        }));
+        schema.metadata().description = Some("UUID suffix (1-32 hex characters)".to_owned());
+        schema.into()
+    }
 }
 
 /// Resolves a [`TailId`] against a collection of UUIDs.
