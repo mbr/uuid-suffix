@@ -134,10 +134,6 @@ pub enum ParseError {
 /// Error returned when resolving a tail ID.
 #[derive(Clone, Debug, Eq, Error, PartialEq)]
 pub enum ResolveError {
-    /// The pattern could not be parsed as a [`TailId`].
-    #[error("invalid tail ID: {0}")]
-    InvalidTailId(#[source] ParseError),
-
     /// No UUID matched the pattern.
     #[error("no UUID matched the pattern")]
     NotFound,
@@ -165,17 +161,6 @@ where
     let mut matches = vec![first, second];
     matches.extend(iter.copied());
     Err(ResolveError::Ambiguous(matches))
-}
-
-/// Resolves a tail ID pattern against a collection of UUIDs.
-///
-/// Parses the pattern as a [`TailId`] and returns the unique matching UUID.
-pub fn resolve<'a, I>(iter: I, pattern: &str) -> Result<Uuid, ResolveError>
-where
-    I: IntoIterator<Item = &'a Uuid>,
-{
-    let tail_id = TailId::try_from(pattern).map_err(ResolveError::InvalidTailId)?;
-    resolve_tail_id(iter, &tail_id)
 }
 
 #[cfg(test)]
@@ -260,8 +245,10 @@ mod tests {
         let id2 = Uuid::parse_str("01234567-89ab-7def-8000-000022222222").expect("valid");
         let ids = vec![id1, id2];
 
-        assert_eq!(resolve(&ids, "11111111"), Ok(id1));
-        assert_eq!(resolve(&ids, "22222222"), Ok(id2));
+        let tail1: TailId = "11111111".parse().expect("valid");
+        let tail2: TailId = "22222222".parse().expect("valid");
+        assert_eq!(resolve_tail_id(&ids, &tail1), Ok(id1));
+        assert_eq!(resolve_tail_id(&ids, &tail2), Ok(id2));
     }
 
     #[test]
@@ -269,8 +256,9 @@ mod tests {
         let id = Uuid::parse_str("01234567-89ab-7def-8000-000011111111").expect("valid");
         let ids = vec![id];
 
+        let tail: TailId = "deadbeef".parse().expect("valid");
         assert!(matches!(
-            resolve(&ids, "deadbeef"),
+            resolve_tail_id(&ids, &tail),
             Err(ResolveError::NotFound)
         ));
     }
@@ -281,17 +269,8 @@ mod tests {
         let id2 = Uuid::parse_str("fedcba98-7654-7321-8000-000012345678").expect("valid");
         let ids = vec![id1, id2];
 
-        let result = resolve(&ids, "12345678");
+        let tail: TailId = "12345678".parse().expect("valid");
+        let result = resolve_tail_id(&ids, &tail);
         assert!(matches!(result, Err(ResolveError::Ambiguous(ref v)) if v.len() == 2));
-    }
-
-    #[test]
-    fn resolve_normalizes_input() {
-        let id = Uuid::parse_str("01234567-89ab-7def-8000-aabbccddeeff").expect("valid");
-        let ids = vec![id];
-
-        assert_eq!(resolve(&ids, "AABBCCDDEEFF"), Ok(id));
-        assert_eq!(resolve(&ids, "CCDD-EEFF"), Ok(id));
-        assert_eq!(resolve(&ids, "ddee ff"), Ok(id));
     }
 }
