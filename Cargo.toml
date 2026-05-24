@@ -5,6 +5,9 @@ version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
 repository = "https://github.com/mbr/uuid-suffix"
+documentation = "https://docs.rs/uuid-suffix"
+readme = "README.md"
+keywords = ["uuid", "suffix", "short-id"]
 
 [features]
 default = []

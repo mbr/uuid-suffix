@@ -196,16 +196,21 @@ impl JsonSchema for UuidSuffix {
     }
 
     fn json_schema(_: &mut schemars::r#gen::SchemaGenerator) -> schemars::schema::Schema {
-        use schemars::schema::{InstanceType, SchemaObject, StringValidation};
+        use schemars::schema::{InstanceType, Metadata, SchemaObject, StringValidation};
 
-        let mut schema = SchemaObject::default();
-        schema.instance_type = Some(InstanceType::String.into());
-        schema.string = Some(Box::new(StringValidation {
-            pattern: Some("^[0-9a-fA-F-]{1,36}$".to_owned()),
+        SchemaObject {
+            instance_type: Some(InstanceType::String.into()),
+            string: Some(Box::new(StringValidation {
+                pattern: Some("^[0-9a-fA-F-]{1,36}$".to_owned()),
+                ..Default::default()
+            })),
+            metadata: Some(Box::new(Metadata {
+                description: Some("UUID suffix (1-32 hex characters)".to_owned()),
+                ..Default::default()
+            })),
             ..Default::default()
-        }));
-        schema.metadata().description = Some("UUID suffix (1-32 hex characters)".to_owned());
-        schema.into()
+        }
+        .into()
     }
 }
 
