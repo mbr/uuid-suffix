@@ -32,7 +32,7 @@ Version 7:
 
 Dandruff wraps `uuid::Uuid` to provide:
 
-- **Short IDs display**: `Display` shows just the last 7 hex chars (e.g., `a1b2c3d7`) by default. This short-ID style has been pioneered by [git](https://git-scm.com). `dandruff` short IDs differ in that they are taken from the end of the ID, not the beginning, since timstamp-based UUIDs have the same prefix at least 3 days.
+- **Short IDs display**: `Display` shows just the last 7 hex chars (e.g., `a1b2c3d7`) by default. This short-ID style has been pioneered by [git](https://git-scm.com). `dandruff` short IDs differ in that they are taken from the end of the ID, not the beginning, since timestamp-based UUIDs have the same prefix at least 3 days.
 - **Short ID resolution**: Match partial IDs against a collection.
 - **Flexible formatting**: Use `{:#}` for the complete hyphenated UUID, or `{:9}` if you need longer IDs.
 - **Type safety**: `TryFrom<Uuid>` validates v6/v7, preventing accidental v4 usage
@@ -40,7 +40,7 @@ Dandruff wraps `uuid::Uuid` to provide:
 
 ## Usage
 
-```rust
+```rust,ignore
 use dandruff::{Dandruff, resolve};
 
 // Generate a new v7 ID (random, no coordination needed)
