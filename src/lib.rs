@@ -8,7 +8,7 @@ use uuid::Uuid;
 /// A parsed tail ID for efficient suffix matching against UUIDs.
 ///
 /// Stores the tail ID as a `u128` value with a length field, enabling fast bitwise comparison.
-/// Accepts 1-32 hex characters (dashes are stripped during parsing, case-insensitive).
+/// Accepts 1 to 32 hex characters (dashes are stripped during parsing, case-insensitive).
 ///
 /// # Example
 ///
@@ -23,7 +23,7 @@ use uuid::Uuid;
 pub struct TailId {
     /// The tail ID value, right-aligned (least significant bits).
     value: u128,
-    /// Number of hex digits (1-32).
+    /// Number of hex digits (MIN_LEN to MAX_LEN).
     len: u8,
 }
 
@@ -45,17 +45,12 @@ impl TailId {
     ///
     /// # Panics
     ///
-    /// Panics if `len` is 0 or greater than 32.
+    /// Panics if `len` is outside `MIN_LEN..=MAX_LEN`.
     #[inline]
     pub fn with_len(uuid: &Uuid, len: u8) -> Self {
         assert!((Self::MIN_LEN..=Self::MAX_LEN).contains(&len));
-        let mask = if len == 32 {
-            u128::MAX
-        } else {
-            (1u128 << (len as u32 * 4)) - 1
-        };
         TailId {
-            value: uuid.as_u128() & mask,
+            value: uuid.as_u128() & Self::mask(len),
             len,
         }
     }
@@ -69,14 +64,19 @@ impl TailId {
     /// Checks if this tail ID matches the suffix of the given UUID.
     #[inline]
     pub fn matches(&self, uuid: &Uuid) -> bool {
-        let mask = if self.len == 32 {
+        // Note: `Uuid::as_u128` packs the rightmost bytes of the UUID into the LSBs,
+        //       thus "read big-endian", which is what we need.
+        (uuid.as_u128() & Self::mask(self.len)) == self.value
+    }
+
+    /// Returns a bitmask for the given number of hex digits.
+    #[inline]
+    fn mask(len: u8) -> u128 {
+        if len == Self::MAX_LEN {
             u128::MAX
         } else {
-            (1u128 << (self.len as u32 * 4)) - 1
-        };
-        // Note: `uuid::as_u128` packs the rightmost bytes of the UUID into the LSBs,
-        //       thus "read big-endian", which is what we need.
-        (uuid.as_u128() & mask) == self.value
+            (1u128 << (len as u32 * 4)) - 1
+        }
     }
 }
 
