@@ -45,6 +45,12 @@ impl UuidSuffix {
         Self::with_len(uuid, Self::STANDARD_LEN)
     }
 
+    /// Creates a max-length suffix (32 hex chars), equivalent to the full UUID.
+    #[inline]
+    pub fn full(uuid: &Uuid) -> Self {
+        Self::with_len(uuid, Self::MAX_LEN)
+    }
+
     /// Creates a UUID suffix from a UUID with the specified length.
     ///
     /// # Panics
@@ -63,6 +69,18 @@ impl UuidSuffix {
     #[inline]
     pub fn len(&self) -> u8 {
         self.len
+    }
+
+    /// Returns `true` if this is a max-length suffix (32 hex chars).
+    #[inline]
+    pub fn is_full(&self) -> bool {
+        self.len == Self::MAX_LEN
+    }
+
+    /// Converts to a [`Uuid`] if this is a max-length suffix.
+    #[inline]
+    pub fn to_uuid(&self) -> Option<Uuid> {
+        self.is_full().then(|| Uuid::from_u128(self.value))
     }
 
     /// Checks if this UUID suffix matches the suffix of the given UUID.
@@ -283,6 +301,19 @@ mod tests {
                 .matches(&uuid)
         );
         assert!(!UuidSuffix::try_from("ffff").unwrap().matches(&uuid));
+    }
+
+    #[test]
+    fn full_uuid_roundtrip() {
+        let uuid = Uuid::parse_str("01234567-89ab-7def-8000-aabbccddeeff").expect("valid UUID");
+
+        let suffix = UuidSuffix::full(&uuid);
+        assert!(suffix.is_full());
+        assert_eq!(suffix.to_uuid(), Some(uuid));
+
+        let partial: UuidSuffix = "aabbccddeeff".parse().expect("valid suffix");
+        assert!(!partial.is_full());
+        assert_eq!(partial.to_uuid(), None);
     }
 
     #[test]
