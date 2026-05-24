@@ -32,3 +32,7 @@ println!("{}", UuidSuffix::new(&ids[0]));  // "d3f6a4e"
 
 - **serde**: Serialization support. Always uses string representation (even in binary formats) because suffixes can be odd-length hex (nibbles can't be losslessly encoded as bytes).
 - **schemars**: JSON Schema support for use with MCP servers and similar.
+
+## Related work
+
+If you just want a shorter way to encode UUIDs, [`short-uuid`](https://docs.rs/short-uuid) might fit the bill as well.
