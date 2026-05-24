@@ -8,7 +8,7 @@ Twitter introduced [Snowflake IDs](https://en.wikipedia.org/wiki/Snowflake_ID) i
 
 UUIDv6 is the UUID equivalent of Snowflake: timestamp + node ID. UUIDv7 ([RFC 9562](https://www.rfc-editor.org/rfc/rfc9562.html)) is the lovechild of v6 and v4: it keeps v6's time-ordering but replaces the node ID with random bits like v4, eliminating the need for machine coordination.
 
-```
+```text
 Version 6:
 
  1ef726fd-dc81-6b19-a27b-010203040506   (v6: timestamp + node ID)
@@ -45,19 +45,22 @@ use dandruff::{Dandruff, resolve};
 
 // Generate a new v7 ID (random, no coordination needed)
 let id = Dandruff::new_v7();
-println!("{}", id);      // "a1b2c3d4" (short)
-println!("{:#}", id);    // "01234567-89ab-7cde-8f01-23456789a1b2" (full)
+println!("{}", id);      // "3f6a4e7" (short, 7 chars)
+println!("{:#}", id);    // "019726fd-dc81-7b19-a27b-e8256d3f6a4e" (full)
+println!("{:12}", id);   // "56d3f6a4e" (custom width)
 
 // Or generate a v6 ID with explicit node ID (like Snowflake)
 let node_id = [0x01, 0x02, 0x03, 0x04, 0x05, 0x06];
 let id_v6 = Dandruff::new_v6(&node_id);
 
-// Parse from string
-let parsed: Dandruff = "01234567-89ab-7cde-8f01-23456789a1b2".parse()?;
+// Parse from string (must be valid v6 or v7)
+let parsed: Dandruff = "019726fd-dc81-7b19-a27b-e8256d3f6a4e".parse().unwrap();
 
 // Resolve short ID against a collection
-let ids: Vec<Dandruff> = load_from_database();
-let matched = resolve(&ids, "a1b2")?;
+let ids = vec![Dandruff::new_v7(), Dandruff::new_v7(), Dandruff::new_v7()];
+let target = ids[1];
+let matched = resolve(&ids, &format!("{}", target)).unwrap();
+assert_eq!(matched, target);
 ```
 
 ## Features
