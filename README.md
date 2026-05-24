@@ -30,16 +30,12 @@ println!("{}", UuidSuffix::new(&ids[0]));  // "d3f6a4e"
 
 ## Full UUIDs
 
-`UuidSuffix` accepts 1-32 hex characters, so it handles full UUIDs too. No need for `enum IdOrSuffix { Full(Uuid), Suffix(UuidSuffix) }` - just use `UuidSuffix` everywhere and call `to_uuid()` when you need the full UUID back:
+`UuidSuffix` accepts 1-32 hex characters, so it handles full UUIDs too. No need for `enum { Full(Uuid), Suffix(UuidSuffix) }`. Use `is_full()` and `to_uuid()` when you need to distinguish:
 
 ```rust
 use uuid_suffix::UuidSuffix;
 
-// Parses both short suffixes and full UUIDs (with or without dashes)
-let short: UuidSuffix = "d3f6a4e".parse().unwrap();
 let full: UuidSuffix = "019726fd-dc81-7b19-a27b-e8256d3f6a4e".parse().unwrap();
-
-assert!(!short.is_full());
 assert!(full.is_full());
 assert!(full.to_uuid().is_some());
 ```
