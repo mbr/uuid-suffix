@@ -1,6 +1,6 @@
 [package]
 name = "uuid-suffix"
-description = "Resolve partial UUIDs against collections using suffix matching"
+description = "Git-style short IDs for UUIDs using suffixes"
 version = "0.1.0"
 edition = "2024"
 license = "MIT OR Apache-2.0"
