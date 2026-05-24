@@ -18,6 +18,7 @@ use uuid::Uuid;
 /// let tail: TailId = "3f6a4e7".parse().unwrap();
 /// assert_eq!(format!("{}", tail), "3f6a4e7");
 /// ```
+#[allow(clippy::len_without_is_empty)]
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 pub struct TailId {
     /// The tail ID value, right-aligned (least significant bits).
@@ -36,23 +37,6 @@ impl TailId {
     #[inline]
     pub fn len(&self) -> u8 {
         self.len
-    }
-
-    /// Returns `true` if this tail ID has zero length.
-    ///
-    /// Note: A zero-length TailId cannot be constructed via parsing, so this always returns
-    /// `false` for validly constructed instances.
-    #[inline]
-    pub fn is_empty(&self) -> bool {
-        self.len == 0
-    }
-
-    /// Returns the underlying value as a `u128`.
-    ///
-    /// The value is right-aligned: for a 7-character tail ID "3f6a4e7", the value is `0x3f6a4e7`.
-    #[inline]
-    pub fn as_u128(&self) -> u128 {
-        self.value
     }
 
     /// Checks if this tail ID matches the suffix of the given UUID.
@@ -241,7 +225,6 @@ mod tests {
     fn parse_valid() {
         let tail: TailId = "3f6a4e7".parse().expect("valid");
         assert_eq!(tail.len(), 7);
-        assert_eq!(tail.as_u128(), 0x3f6a4e7);
     }
 
     #[test]
