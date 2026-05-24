@@ -10,6 +10,7 @@ use uuid::Uuid;
 /// Displays as the last 7 hex characters by default. Use width specifier for more (e.g.,
 /// `{:9}`), or `{:#}` for the full hyphenated UUID.
 #[derive(Clone, Copy, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+#[repr(transparent)]
 pub struct Dandruff(Uuid);
 
 impl Dandruff {
@@ -131,6 +132,100 @@ impl From<Dandruff> for Uuid {
     #[inline]
     fn from(d: Dandruff) -> Self {
         d.0
+    }
+}
+
+// --- Serialization implementations ---
+
+#[cfg(feature = "serde")]
+mod serde_impl {
+    use serde::{Deserialize, Deserializer, Serialize, Serializer};
+
+    use super::*;
+
+    impl Serialize for Dandruff {
+        /// Serializes the UUID.
+        ///
+        /// Uses hyphenated string format for human-readable serializers (JSON, TOML) and raw
+        /// 16-byte array for binary serializers (bincode, msgpack).
+        fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+            if serializer.is_human_readable() {
+                serializer.serialize_str(&self.0.as_hyphenated().to_string())
+            } else {
+                self.0.as_bytes().serialize(serializer)
+            }
+        }
+    }
+
+    impl<'de> Deserialize<'de> for Dandruff {
+        /// Deserializes a UUID.
+        ///
+        /// Accepts hyphenated string format from human-readable deserializers and raw 16-byte
+        /// array from binary deserializers. Does not validate UUID version.
+        fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+            if deserializer.is_human_readable() {
+                let s = String::deserialize(deserializer)?;
+                let uuid =
+                    Uuid::parse_str(&s).map_err(|e| serde::de::Error::custom(e.to_string()))?;
+                Ok(Dandruff::from_uuid_unchecked(uuid))
+            } else {
+                let bytes = <[u8; 16]>::deserialize(deserializer)?;
+                Ok(Dandruff::from_uuid_unchecked(Uuid::from_bytes(bytes)))
+            }
+        }
+    }
+}
+
+#[cfg(feature = "borsh")]
+mod borsh_impl {
+    use borsh::{BorshDeserialize, BorshSerialize};
+
+    use super::*;
+
+    impl BorshSerialize for Dandruff {
+        /// Serializes the UUID as 16 raw bytes.
+        fn serialize<W: std::io::Write>(&self, writer: &mut W) -> std::io::Result<()> {
+            self.0.serialize(writer)
+        }
+    }
+
+    impl BorshDeserialize for Dandruff {
+        /// Deserializes a UUID from 16 raw bytes.
+        ///
+        /// Does not validate UUID version.
+        fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+            let uuid = Uuid::deserialize_reader(reader)?;
+            Ok(Dandruff::from_uuid_unchecked(uuid))
+        }
+    }
+}
+
+#[cfg(feature = "bytemuck")]
+mod bytemuck_impl {
+    use super::*;
+
+    // SAFETY: Dandruff is a transparent wrapper around Uuid, which is Pod.
+    // The repr is not explicitly transparent, but Dandruff(Uuid) has the same layout as Uuid.
+    unsafe impl bytemuck::Pod for Dandruff {}
+
+    // SAFETY: Dandruff is a transparent wrapper around Uuid, which is Zeroable.
+    unsafe impl bytemuck::Zeroable for Dandruff {}
+}
+
+#[cfg(feature = "arbitrary")]
+mod arbitrary_impl {
+    use arbitrary::Arbitrary;
+
+    use super::*;
+
+    impl<'a> Arbitrary<'a> for Dandruff {
+        /// Generates an arbitrary [`Dandruff`] by wrapping an arbitrary UUID.
+        ///
+        /// Note: The generated UUID may not be a valid v6 or v7 UUID.
+        fn arbitrary(u: &mut arbitrary::Unstructured<'a>) -> arbitrary::Result<Self> {
+            let uuid = Uuid::arbitrary(u)?;
+            Ok(Dandruff::from_uuid_unchecked(uuid))
+        }
     }
 }
 
@@ -652,5 +747,53 @@ mod proptests {
             let parsed: Dandruff = full.parse().expect("roundtrip should succeed");
             prop_assert_eq!(id, parsed);
         }
+    }
+}
+
+#[cfg(all(test, feature = "serde", feature = "v7"))]
+mod serde_tests {
+    use super::*;
+
+    #[test]
+    fn serde_json_roundtrip() {
+        let id = Dandruff::new_v7();
+        let json = serde_json::to_string(&id).expect("serialize");
+        let parsed: Dandruff = serde_json::from_str(&json).expect("deserialize");
+        assert_eq!(id, parsed);
+    }
+
+    #[test]
+    fn serde_json_format() {
+        let id = Dandruff::from_uuid_unchecked(
+            Uuid::parse_str("019726fd-dc81-7b19-a27b-e8256d3f6a4e").expect("valid uuid"),
+        );
+        let json = serde_json::to_string(&id).expect("serialize");
+        assert_eq!(json, "\"019726fd-dc81-7b19-a27b-e8256d3f6a4e\"");
+    }
+
+    #[test]
+    fn serde_bincode_roundtrip() {
+        let id = Dandruff::new_v7();
+        let bytes = bincode::serialize(&id).expect("serialize");
+        assert_eq!(bytes.len(), 16);
+        let parsed: Dandruff = bincode::deserialize(&bytes).expect("deserialize");
+        assert_eq!(id, parsed);
+    }
+}
+
+#[cfg(all(test, feature = "borsh", feature = "v7"))]
+mod borsh_tests {
+    use borsh::{BorshDeserialize, BorshSerialize};
+
+    use super::*;
+
+    #[test]
+    fn borsh_roundtrip() {
+        let id = Dandruff::new_v7();
+        let mut bytes = Vec::new();
+        id.serialize(&mut bytes).expect("serialize");
+        assert_eq!(bytes.len(), 16);
+        let parsed = Dandruff::deserialize(&mut bytes.as_slice()).expect("deserialize");
+        assert_eq!(id, parsed);
     }
 }
