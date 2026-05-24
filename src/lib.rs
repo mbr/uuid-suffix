@@ -47,6 +47,8 @@ impl TailId {
         } else {
             (1u128 << (self.len as u32 * 4)) - 1
         };
+        // Note: `uuid::as_u128` packs the rightmost bytes of the UUID into the LSBs,
+        //       thus "read big-endian", which is what we need.
         (uuid.as_u128() & mask) == self.value
     }
 }
